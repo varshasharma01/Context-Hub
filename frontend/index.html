@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Context Hub</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <div class="header">
+        📄 Context Hub
+    </div>
+
+    <div class="main">
+
+        <!-- LEFT SIDE (UPLOAD + PREVIEW) -->
+        <div class="left-box">
+            <input type="file" id="pdfFile" accept="application/pdf" hidden>
+
+            <button class="upload-btn" onclick="triggerUpload()">
+                ⬆ Upload PDF
+            </button>
+
+            <div class="preview" id="preview">
+                <p>No PDF uploaded</p>
+            </div>
+        </div>
+
+        <!-- RIGHT SIDE (ONLY QUERY) -->
+        <div class="right-box">
+
+            <input type="text" id="query" placeholder="Type any question from the PDF...">
+
+            <button onclick="askQuery()">Ask</button>
+
+            <div id="response"></div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
