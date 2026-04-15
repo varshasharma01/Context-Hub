@@ -1,4 +1,4 @@
-# What context Hub is About ?
+# What Context Hub is About ?
 
 This project is a simple Retrieval-Augmented Generation (RAG) application.
 
