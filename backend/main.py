@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import nomic
 import fitz  # PyMuPDF
 from nomic import embed
-from groq import Groq
+# from groq import Groq
 
 from pinecone import Pinecone
 import os
@@ -13,7 +13,7 @@ import string
 from nomic import embed
 import uuid
 
-# Load env variables
+# Load env variablesz
 load_dotenv()
 
 from google import genai # Naya import
@@ -113,7 +113,7 @@ def search(query):
     return relevant_chunks
 
 
-def generate_answer(query, context):
+def generate_answer(query,context):
     # print(f"DEBUG: Context sent to Groq: {context[:200]}...") # Pehle 200 characters dekhein
     # if not context.strip():
     #     return "I'm sorry, I couldn't find any relevant text in the PDF to answer this."
@@ -138,7 +138,8 @@ def generate_answer(query, context):
             model="gemini-3-flash-preview", 
             contents=prompt,
             config={
-                "system_instruction": "You are a helpful assistant. Answer ONLY using the provided context. If the answer is not there, say you don't know."
+                "system_instruction": "You are a helpful assistant. Answer ONLY using the provided context. If the answer is not there, say you don't know.\
+                    and when you get answer elaborate and generate more information about the answer."
             }
         )
         
@@ -163,7 +164,7 @@ async def upload_pdf(file: UploadFile = File(...)):
             index.delete(delete_all=True)
             print("DEBUG: Pinecone Index Cleared.")
         except Exception as e:
-            # Agar index khali hai ya namespace nahi mila, toh fikar mat karo
+            
             print(f"DEBUG: Delete skipped or Index already empty: {e}")
 
         # STEP 2: Nayi file read aur process karo
@@ -203,11 +204,11 @@ async def query_pdf(query: str = Query(...)): # Explicitly define as a query par
             
         context = " ".join(results)
         
-        # answer = generate_answer(query, context)
+        answer = generate_answer(query, context)
 
-        # return {"answer": answer, "context": context}
-        answer = generate_answer(query)
-        return {"answer": answer}
+        return {"answer": answer, "context": context}
+        # answer = generate_answer(query)
+        # return {"answer": answer}
     
     except Exception as e:
         return {"error": f"Search failed: {str(e)}"}
