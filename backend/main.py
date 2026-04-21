@@ -326,7 +326,8 @@ async def query_image(query: str = Query(...)):
     
 def extract_text_from_url(url):
     try:
-        response = requests.get(url, timeout=10)
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=10)
 
         if response.status_code != 200:
             return None
@@ -342,15 +343,14 @@ def extract_text_from_url(url):
         return text[:5000]   # limit (VERY IMPORTANT)
 
     except Exception as e:
-        print(f"URL error: {e}")
+        print("URL Error:", e)
         return None
     
-    
-def generate_link_answer(url, query=None):
+def generate_url_answer(url, query=None):
     text = extract_text_from_url(url)
 
     if not text:
-        return "Could not fetch content from this link."
+        return "Could not fetch content from this URL."
 
     try:
         prompt = f"""
@@ -362,7 +362,57 @@ def generate_link_answer(url, query=None):
         {text}
 
         Task:
-        Explain what this website/page is about in simple words.
+        Explain what this page is about in simple words.
+        """
+
+        if query:
+            prompt += f"\n\nUser Question: {query}"
+
+        response = client_gemini.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=prompt
+        )
+
+        return response.text if response.text else "No response."
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+    
+    
+current_url = None
+current_url_text = None
+
+
+@app.post("/process-url")
+async def process_url(url: str = Query(...)):
+    global current_url, current_url_text
+
+    text = extract_text_from_url(url)
+
+    if not text:
+        return {"error": "Failed to extract content"}
+
+    current_url = url
+    current_url_text = text
+
+    return {"message": "URL processed successfully"}
+
+
+@app.post("/query-url")
+async def query_url(query: str = Query(...)):
+    global current_url, current_url_text
+
+    if not current_url_text:
+        return {"error": "No URL processed"}
+
+    try:
+        prompt = f"""
+        URL: {current_url}
+
+        Content:
+        {current_url_text}
+
+        Question: {query}
         """
 
         response = client_gemini.models.generate_content(
@@ -370,20 +420,14 @@ def generate_link_answer(url, query=None):
             contents=prompt
         )
 
-        return response.text
-
-    except Exception as e:
-        return f"Error: {str(e)}"
-    
-
-@app.post("/analyze-link")
-async def analyze_link(url: str = Query(...)):
-    try:
-        answer = generate_link_answer(url)
-        return {"answer": answer}
+        return {"answer": response.text}
 
     except Exception as e:
         return {"error": str(e)}
     
+    
+    
+    
+
     
     
