@@ -453,7 +453,7 @@ with tab4:
     with col2:
         query = st.text_input("Ask something about the video...")
 
-        ask_clicked = st.button("Ask")
+        ask_clicked = st.button("Ask video")
 
         if ask_clicked:
 
