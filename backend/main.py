@@ -18,6 +18,11 @@ from bs4 import BeautifulSoup
 import base64
 import io
 from PIL import Image
+# for youtube video 
+
+from urllib.parse import urlparse, parse_qs
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+
 # Load env variablesz
 load_dotenv()
 
@@ -426,8 +431,101 @@ async def query_url(query: str = Query(...)):
         return {"error": str(e)}
     
     
+##########################################################################################################
+
+
+
+def get_video_id(url):
+    parsed_url = urlparse(url)
+
+    if "youtube.com" in url:
+        return parse_qs(parsed_url.query).get("v", [None])[0]
+    elif "youtu.be" in url:
+        return parsed_url.path.strip("/")
     
+    return None
+
+
+
+def get_transcript(url):
+    try:
+        video_id = get_video_id(url)
+
+        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+
+        text = " ".join([t["text"] for t in transcript])
+        return text
+
+    except TranscriptsDisabled:
+        return "ERROR: Transcripts are disabled for this video."
+
+    except NoTranscriptFound:
+        return "ERROR: No transcript available."
+
+    except Exception as e:
+        return f"ERROR: {str(e)}"  
     
 
+YOUTUBE_NAMESPACE = "youtube"
+@app.post("/process-youtube")
+async def process_youtube(url: str = Query(...)):
     
+    try:
+        # clear old youtube data
+        try:
+            index.delete(delete_all=True, namespace=YOUTUBE_NAMESPACE)
+        except:
+            pass
+
+        text = get_transcript(url)
+
+        if text.startswith("ERROR"):
+            return {"error": text}
+
+        chunks = chunk_text(text, size=1000)
+        embeddings = create_embeddings(chunks)
+
+        # store with namespace
+        vectors = []
+        for i in range(len(embeddings)):
+            vectors.append({
+                "id": str(uuid.uuid4()),
+                "values": embeddings[i],
+                "metadata": {"text": chunks[i]}
+            })
+
+        index.upsert(vectors=vectors, namespace=YOUTUBE_NAMESPACE)
+
+        return {"message": "YouTube processed successfully"}
+
+    except Exception as e:
+        return {"error": str(e)}
     
+
+@app.post("/query-youtube")
+async def query_youtube(query: str = Query(...)):
+    try:
+        query_emb = embed.text(
+            texts=[query],
+            model="nomic-embed-text-v1",
+            task_type="search_query"
+        )["embeddings"][0]
+
+        results = index.query(
+            vector=query_emb,
+            top_k=5,
+            include_metadata=True,
+            namespace=YOUTUBE_NAMESPACE
+        )
+
+        context = "\n\n".join([
+            match["metadata"]["text"]
+            for match in results["matches"]
+        ])
+
+        answer = generate_answer(query, context)
+
+        return {"answer": answer}
+
+    except Exception as e:
+        return {"error": str(e)}
