@@ -125,6 +125,9 @@ with tab0:
         
     st.divider()
     st.caption("Developed by Varsha | Powered by Gemini, Pinecone & Nomic")
+    
+#########################################################################################################################
+
 with tab1:
     st.header("PDF Analysis")
 
@@ -149,7 +152,7 @@ with tab1:
 
         if uploaded_file is not None:
 
-            # 🔥 KEY FIX: detect new file
+            #  KEY FIX: detect new file
             if st.session_state.uploaded_filename != uploaded_file.name:
                 st.session_state.file_processed = False
 
@@ -173,7 +176,7 @@ with tab1:
                         if response.status_code == 200:
                             st.success(response.json()['message'])
 
-                            # ✅ update state
+                            # update state
                             st.session_state.file_processed = True
                             st.session_state.uploaded_filename = uploaded_file.name
 
@@ -195,7 +198,7 @@ with tab1:
 
         user_query = st.text_input("Type any question from the PDF...")
 
-        ask_clicked = st.button("Ask")
+        ask_clicked = st.button("Ask pdf")
 
         if ask_clicked:
 
@@ -226,29 +229,100 @@ with tab1:
 
             else:
                 st.error(" Upload PDF first!")
-                
-with tab2:
-    col1 , col2 = st.columns([1,1], gap='large')
-    with col1: 
-        st.header("🖼️ Image Intelligence")
-        uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
-        if uploaded_image is not None :
-            # Show a preview of the image
-            # st.image(uploaded_image, caption="Uploaded Image", width=True)
-            
-            # if st.button("Analyze Image"):
-            with st.spinner("Creating Visual Embeddings..."):
-                # Call your backend /process-image route
-                files = {"file": uploaded_image.getvalue()}
-                response = requests.post("http://localhost:8000/process-image", files=files)
-                st.success("Image indexed in Pinecone!")
+#########################################################################################################################
+
+with tab2:
+    st.header("🖼️ Image Intelligence")
+
+    # -------- SESSION STATE --------
+    if "image_processed" not in st.session_state:
+        st.session_state.image_processed = False
+
+    if "uploaded_image_name" not in st.session_state:
+        st.session_state.uploaded_image_name = None
+
+    col1, col2 = st.columns([1,1], gap='large')
+
+    # -------- LEFT SIDE (UPLOAD) --------
+    with col1:
+        uploaded_image = st.file_uploader(
+            "Upload an image",
+            type=["jpg", "jpeg", "png"]
+        )
+
+        if uploaded_image is not None:
+
+            # show preview
+            st.image(uploaded_image, caption="Uploaded Image", width="content")
+
+            #  detect new image
+            if st.session_state.uploaded_image_name != uploaded_image.name:
+                st.session_state.image_processed = False
+
+            if not st.session_state.image_processed:
+
+                with st.spinner("Processing image..."):
+                    try:
+                        files = {
+                            "file": (
+                                uploaded_image.name,
+                                uploaded_image.getvalue(),
+                                "image/png"
+                            )
+                        }
+
+                        response = requests.post(
+                            "http://localhost:8000/process-image",
+                            files=files
+                        )
+
+                        if response.status_code == 200:
+                            st.session_state.image_processed = True
+                            st.session_state.uploaded_image_name = uploaded_image.name
+                            st.success("Image processed!")
+
+                        else:
+                            st.error("Backend error")
+
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        else:
+            st.info("Upload an image to begin")
+
+    # -------- RIGHT SIDE (QUERY) --------
     with col2:
-        # Query Section
         query = st.text_input("Ask something about the image...")
-        if query and st.button("Ask Gemini"):
-           
-            st.write("Gemini is thinking...")
+
+        ask_clicked_image = st.button("Ask Image")
+
+        if ask_clicked_image:
+
+            if st.session_state.image_processed:
+
+                if query:
+                    with st.spinner("Analyzing with AI..."):
+                        try:
+                            response = requests.post(
+                                "http://localhost:8000/query-image",
+                                params={"query": query}
+                            )
+
+                            if response.status_code == 200:
+                                st.write(response.json().get("answer"))
+
+                            else:
+                                st.error("Backend error")
+
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+                else:
+                    st.warning("Enter a question")
+
+            else:
+                st.error("Upload image first!")
 
 with tab3:
     st.header("Web Context")

@@ -2,17 +2,22 @@ from fastapi import FastAPI, UploadFile, File, Query
 from  google import genai
 from fastapi.middleware.cors import CORSMiddleware
 import nomic
+# for pdf
 import fitz  # PyMuPDF
 from nomic import embed
-# from groq import Groq
-from PIL import image
 from pinecone import Pinecone
 import os
 from dotenv import load_dotenv
 import string
 from nomic import embed
 import uuid
-
+# for URL
+import requests
+from bs4 import BeautifulSoup
+# for image
+import base64
+import io
+from PIL import Image
 # Load env variablesz
 load_dotenv()
 
@@ -233,66 +238,91 @@ def store_image_embedding(image_vector, filename):
     ])
     
     
-def search_image(query):
-    query_emb = embed.text(
-        texts=[query],
-        model="nomic-embed-text-v1",
-        task_type="search_query"
-    )["embeddings"][0]
+IMAGE_NAMESPACE = "image"
 
-    results = index.query(
-        vector=query_emb,
-        top_k=1,
-        include_metadata=True
+def store_image_embedding(image_vector, filename):
+    index.upsert(
+        vectors=[{
+            "id": str(uuid.uuid4()),
+            "values": image_vector,
+            "metadata": {
+                "type": "image",
+                "filename": filename
+            }
+        }],
+        namespace=IMAGE_NAMESPACE
     )
 
-    return results
 
 def generate_image_answer(query, image):
     try:
+        # Convert image → bytes
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format="PNG")
+        img_bytes = img_byte_arr.getvalue()
+
+        # Convert to base64
+        img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+
         response = client_gemini.models.generate_content(
             model="gemini-3-flash-preview",
-            contents=[query, image]
+            contents=[
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": query},
+                        {
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": img_base64
+                            }
+                        }
+                    ]
+                }
+            ]
         )
 
-        return response.text
+        return response.text if response.text else "No answer generated."
 
     except Exception as e:
         return f"Error: {str(e)}"
     
-    
+
+current_image = None
 
 @app.post("/process-image")
 async def process_image(file: UploadFile = File(...)):
+    global current_image
+
     try:
         image = Image.open(file.file)
+        current_image = image  # 🔥 store for query
 
-        # 1. embedding
+        # optional embedding
         image_vector = create_image_embedding(image)
-
-        # 2. store
         store_image_embedding(image_vector, file.filename)
 
-        return {"message": "Image indexed successfully!"}
+        return {"message": "Image processed successfully"}
 
     except Exception as e:
         return {"error": str(e)}
-    
 
 @app.post("/query-image")
 async def query_image(query: str = Query(...)):
-    try:
-        #  Here we skip pinecone and directly use Gemini Vision
-        response = client_gemini.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=query
-        )
+    global current_image
 
-        return {"answer": response.text}
+    try:
+        if current_image is None:
+            return {"error": "No image uploaded"}
+
+        answer = generate_image_answer(query, current_image)
+
+        return {"answer": answer}
 
     except Exception as e:
         return {"error": str(e)}
-    
+ 
+##########################################################################################################    
     
 def extract_text_from_url(url):
     try:
