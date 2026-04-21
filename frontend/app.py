@@ -2,14 +2,14 @@ import streamlit as st
 import requests
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Context Hub", layout="wide")
+st.set_page_config(page_title="ContextHub", layout="wide")
 
 #---
 st.markdown("""
     <style>
     .main-header {
-        background-color: #d6d2a9;
-        color: blue;
+        background-color: #427d44;
+        color: white;
         padding: 15px;
         border-radius: 10px;
         text-align: center;
@@ -21,98 +21,243 @@ st.markdown("""
         width: 100%;
     }
     </style>
+    <style>
+        /* Change the font size of the tab labels */
+        .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+            font-size: 1.5rem; 
+            gap: 20px;
+        }
+        
+        /* Optional: Change the height and padding of the tabs */
+        .stTabs [data-baseweb="tab"] {
+            height: 60px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            padding-right: 20px;
+            padding-left: 20px;
+        }
+        
+    </style>
     <div class="main-header">
-        <h1>📄 Context Hub</h1>
+        <h1> 🔍 Context Hub</h1>
     </div>
     """, unsafe_allow_html=True)
 
 
-# Initialize state
-if "file_processed" not in st.session_state:
-    st.session_state.file_processed = False
+tab0, tab1, tab2, tab3, tab4 = st.tabs([
+    "About",
+    "📄 Document", 
+    "🖼️ Visual", 
+    "🔗 Web Link", 
+    "🎥 Video"
+])
 
-if "uploaded_filename" not in st.session_state:
-    st.session_state.uploaded_filename = None
+with tab0:
+    st.markdown("""
+            
+            <h3 style='text-align: center; color: #427d44;'>Your Universal Multimodal Intelligence Hub</h3>
+            <br>
+        """, unsafe_allow_html=True)
 
-col1, col2 = st.columns([1, 1], gap="large")
+        # 3-column layout for a "Features at a glance" look
+    col1, col2, col3 = st.columns(3)
 
-with col1:
-    st.subheader("Upload & Preview")
+    with col1:
+        st.markdown("### ⚡ Fast")
+        st.write("Powered by **Gemini** inference for near-instant responses.")
+        
+    with col2:
+        st.markdown("### 🧠 Smart")
+        st.write("Uses **Nomic Embeddings** and **Pinecone** for deep context retrieval.")
+        
+    with col3:
+        st.markdown("### 🔄 Versatile")
+        st.write("Handles Documents, Images, Web Links, and Videos seamlessly.")
 
-    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf", label_visibility="collapsed")
+    st.markdown("---")
 
-    if uploaded_file is not None:
+    st.markdown("## 📖 What is ContextHub?")
+    st.write("""
+        ContextHub is a state-of-the-art **RAG (Retrieval-Augmented Generation)** platform. 
+        Instead of just talking to a general AI, you can give the AI your own specific data—be it a complex 
+        PDF report, a website link, or even a video—and ask questions based on that specific content.
+    """)
 
-        #Only process ONCE
-        if not st.session_state.file_processed:
+    with st.expander("🚀 How it works under the hood"):
+        st.info("""
+        1. **Ingest:** You upload a source (PDF, Image, Link, or Video).
+        2. **Process:** The system chunks the data and uses **Nomic** to create vector embeddings.
+        3. **Store:** These vectors are indexed in a **Pinecone** database.
+        4. **Retrieve:** When you ask a question, we find the most relevant context.
+        5. **Generate:** **Gemini** generates an accurate answer based ONLY on your data.
+        """)
 
-            with st.spinner("Analyzing with AI..."):
-                try:
-                    files = {
-                        "file": (
-                            uploaded_file.name,
-                            uploaded_file.getvalue(),
-                            "application/pdf"
-                        )
-                    }
+    st.markdown("---")
+    st.markdown("""
+            
+            <h3 style='text-align: center; color: #427d44;'>🛠 How to use ContextHub?</h3>
+            <br>
+        """, unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        <div class="feature-card">
+            <h4>1. Select your Source</h4>
+            <p>Choose between PDF, Image, Web, or Video tabs based on your needs.</p>
+        </div><br>
+        <div class="feature-card">
+            <h4>2. Upload & Process</h4>
+            <p>Click the process button to let Nomic & Gemini index your data.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-                    response = requests.post("http://127.0.0.1:8000/upload", files=files)
+    with col2:
+        st.markdown("""
+        <div class="feature-card">
+            <h4>3. Ask Anything</h4>
+            <p>Type your query in the chat box. The AI answers <b>only</b> based on your data.</p>
+        </div><br>
+        <div class="feature-card">
+            <h4>4. Multi-Format Output</h4>
+            <p>Get summaries, tables, or code extracted directly from your sources.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    st.divider()
+    st.caption("Developed by Varsha | Powered by Gemini, Pinecone & Nomic")
+with tab1:
+    st.header("PDF Analysis")
 
-                    if response.status_code == 200:
-                        st.success(response.json()['message'])
+    # -------- SESSION STATE --------
+    if "file_processed" not in st.session_state:
+        st.session_state.file_processed = False
 
-                        #  mark as processed
-                        st.session_state.file_processed = True
-                        st.session_state.uploaded_filename = uploaded_file.name
+    if "uploaded_filename" not in st.session_state:
+        st.session_state.uploaded_filename = None
 
-                    else:
-                        st.error(f"Backend Error: {response.text}")
+    col1, col2 = st.columns([1, 1], gap="large")
 
-                except Exception as e:
-                    st.error(f"Connection Error: {e}")
+    # -------- LEFT SIDE (UPLOAD) --------
+    with col1:
+        st.subheader("Upload & Preview")
 
-        else:
-            #  Show already uploaded
-            st.success(f"File '{st.session_state.uploaded_filename}' already processed")
+        uploaded_file = st.file_uploader(
+            "Choose a PDF file",
+            type="pdf",
+            label_visibility="collapsed"
+        )
 
-    else:
-        st.warning("Please select a PDF file first!")
+        if uploaded_file is not None:
 
+            # 🔥 KEY FIX: detect new file
+            if st.session_state.uploaded_filename != uploaded_file.name:
+                st.session_state.file_processed = False
 
-with col2:
-    st.subheader("Query Document")
+            if not st.session_state.file_processed:
 
-    user_query = st.text_input("Type any question from the PDF...")
-
-    if st.button("Ask"):
-
-        if st.session_state.file_processed:
-
-            if user_query:
-                with st.spinner("Thinking..."):
+                with st.spinner("Analyzing with AI..."):
                     try:
+                        files = {
+                            "file": (
+                                uploaded_file.name,
+                                uploaded_file.getvalue(),
+                                "application/pdf"
+                            )
+                        }
+
                         response = requests.post(
-                            "http://127.0.0.1:8000/query",
-                            params={"query": user_query}
+                            "http://127.0.0.1:8000/upload",
+                            files=files
                         )
 
                         if response.status_code == 200:
-                            data = response.json()
+                            st.success(response.json()['message'])
 
-                            st.markdown("### Answer:")
-                            st.write(data.get("answer"))
-
-                            st.markdown("### Context:")
-                            st.write(data.get("context"))
+                            # ✅ update state
+                            st.session_state.file_processed = True
+                            st.session_state.uploaded_filename = uploaded_file.name
 
                         else:
-                            st.error(f"Backend Error: {response.status_code}")
+                            st.error(f"Backend Error: {response.text}")
 
                     except Exception as e:
                         st.error(f"Connection Error: {e}")
 
             else:
-                st.warning("Please type a question first!")
+                st.success(f"File '{uploaded_file.name}' already processed")
 
         else:
-            st.error(" Upload PDF first!")
+            st.warning("Please select a PDF file first!")
+
+    # -------- RIGHT SIDE (QUERY) --------
+    with col2:
+        st.subheader("Query Document")
+
+        user_query = st.text_input("Type any question from the PDF...")
+
+        ask_clicked = st.button("Ask")
+
+        if ask_clicked:
+
+            if st.session_state.file_processed:
+
+                if user_query:
+                    with st.spinner("Thinking..."):
+                        try:
+                            response = requests.post(
+                                "http://127.0.0.1:8000/query",
+                                params={"query": user_query}
+                            )
+
+                            if response.status_code == 200:
+                                data = response.json()
+
+                                st.markdown("### Answer:")
+                                st.write(data.get("answer"))
+
+                            else:
+                                st.error(f"Backend Error: {response.status_code}")
+
+                        except Exception as e:
+                            st.error(f"Connection Error: {e}")
+
+                else:
+                    st.warning("Please type a question first!")
+
+            else:
+                st.error(" Upload PDF first!")
+                
+with tab2:
+    col1 , col2 = st.columns([1,1], gap='large')
+    with col1: 
+        st.header("🖼️ Image Intelligence")
+        uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+
+        if uploaded_image is not None :
+            # Show a preview of the image
+            # st.image(uploaded_image, caption="Uploaded Image", width=True)
+            
+            # if st.button("Analyze Image"):
+            with st.spinner("Creating Visual Embeddings..."):
+                # Call your backend /process-image route
+                files = {"file": uploaded_image.getvalue()}
+                response = requests.post("http://localhost:8000/process-image", files=files)
+                st.success("Image indexed in Pinecone!")
+    with col2:
+        # Query Section
+        query = st.text_input("Ask something about the image...")
+        if query and st.button("Ask Gemini"):
+           
+            st.write("Gemini is thinking...")
+
+with tab3:
+    st.header("Web Context")
+    # Your Scraping logic here
+
+with tab4:
+    st.header("Video Insights")
+    # Your YouTube/Video logic here
+
+    
+
+# Initialize state

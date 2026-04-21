@@ -5,7 +5,7 @@ import nomic
 import fitz  # PyMuPDF
 from nomic import embed
 # from groq import Groq
-
+from PIL import image
 from pinecone import Pinecone
 import os
 from dotenv import load_dotenv
@@ -206,9 +206,154 @@ async def query_pdf(query: str = Query(...)): # Explicitly define as a query par
         
         answer = generate_answer(query, context)
 
-        return {"answer": answer, "context": context}
+        # return {"answer": answer, "context": context}
         # answer = generate_answer(query)
-        # return {"answer": answer}
+        return {"answer": answer}
     
     except Exception as e:
         return {"error": f"Search failed: {str(e)}"}
+    
+def create_image_embedding(image):
+    output = embed.image(
+        images=[image],
+        model="nomic-embed-vision-v1.5"
+    )
+    return output["embeddings"][0]
+
+def store_image_embedding(image_vector, filename):
+    index.upsert([
+        {
+            "id": str(uuid.uuid4()),
+            "values": image_vector,
+            "metadata": {
+                "type": "image",
+                "filename": filename
+            }
+        }
+    ])
+    
+    
+def search_image(query):
+    query_emb = embed.text(
+        texts=[query],
+        model="nomic-embed-text-v1",
+        task_type="search_query"
+    )["embeddings"][0]
+
+    results = index.query(
+        vector=query_emb,
+        top_k=1,
+        include_metadata=True
+    )
+
+    return results
+
+def generate_image_answer(query, image):
+    try:
+        response = client_gemini.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=[query, image]
+        )
+
+        return response.text
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+    
+    
+
+@app.post("/process-image")
+async def process_image(file: UploadFile = File(...)):
+    try:
+        image = Image.open(file.file)
+
+        # 1. embedding
+        image_vector = create_image_embedding(image)
+
+        # 2. store
+        store_image_embedding(image_vector, file.filename)
+
+        return {"message": "Image indexed successfully!"}
+
+    except Exception as e:
+        return {"error": str(e)}
+    
+
+@app.post("/query-image")
+async def query_image(query: str = Query(...)):
+    try:
+        #  Here we skip pinecone and directly use Gemini Vision
+        response = client_gemini.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=query
+        )
+
+        return {"answer": response.text}
+
+    except Exception as e:
+        return {"error": str(e)}
+    
+    
+def extract_text_from_url(url):
+    try:
+        response = requests.get(url, timeout=10)
+
+        if response.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # remove scripts/styles
+        for tag in soup(["script", "style"]):
+            tag.decompose()
+
+        text = soup.get_text(separator=" ")
+
+        return text[:5000]   # limit (VERY IMPORTANT)
+
+    except Exception as e:
+        print(f"URL error: {e}")
+        return None
+    
+    
+def generate_link_answer(url, query=None):
+    text = extract_text_from_url(url)
+
+    if not text:
+        return "Could not fetch content from this link."
+
+    try:
+        prompt = f"""
+        You are given content from a webpage.
+
+        URL: {url}
+
+        Content:
+        {text}
+
+        Task:
+        Explain what this website/page is about in simple words.
+        """
+
+        response = client_gemini.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=prompt
+        )
+
+        return response.text
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+    
+
+@app.post("/analyze-link")
+async def analyze_link(url: str = Query(...)):
+    try:
+        answer = generate_link_answer(url)
+        return {"answer": answer}
+
+    except Exception as e:
+        return {"error": str(e)}
+    
+    
+    
