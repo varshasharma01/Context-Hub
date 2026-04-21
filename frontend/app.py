@@ -325,9 +325,85 @@ with tab2:
                 st.error("Upload image first!")
 
 with tab3:
-    st.header("Web Context")
-    # Your Scraping logic here
+    st.header("🌐 URL Intelligence")
 
+    # -------- SESSION STATE --------
+    if "url_processed" not in st.session_state:
+        st.session_state.url_processed = False
+
+    if "current_url" not in st.session_state:
+        st.session_state.current_url = None
+
+    col1, col2 = st.columns([1,1], gap="large")
+
+    # -------- LEFT (INPUT URL) --------
+    with col1:
+        url = st.text_input("Paste URL here")
+
+        if url:
+
+            # detect new URL
+            if st.session_state.current_url != url:
+                st.session_state.url_processed = False
+
+            if not st.session_state.url_processed:
+
+                with st.spinner("Fetching website..."):
+                    try:
+                        response = requests.post(
+                            "http://localhost:8000/process-url",
+                            params={"url": url}
+                        )
+
+                        if response.status_code == 200:
+                            st.session_state.url_processed = True
+                            st.session_state.current_url = url
+                            st.success("URL processed!")
+
+                        else:
+                            st.error("Backend error")
+
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        else:
+            st.info("Enter a URL to begin")
+
+    # -------- RIGHT (QUERY) --------
+    with col2:
+        query = st.text_input("Ask something about the website...")
+
+        ask_clicked = st.button("Ask")
+
+        if ask_clicked:
+
+            if st.session_state.url_processed:
+
+                if query:
+                    with st.spinner("Analyzing..."):
+                        try:
+                            response = requests.post(
+                                "http://localhost:8000/query-url",
+                                params={"query": query}
+                            )
+
+                            if response.status_code == 200:
+                                st.write(response.json().get("answer"))
+
+                            else:
+                                st.error("Backend error")
+
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+                else:
+                    st.warning("Enter a question")
+
+            else:
+                st.error("Process URL first!")
+                
+                
+# ##############################################################################################################
 with tab4:
     st.header("Video Insights")
     # Your YouTube/Video logic here
