@@ -446,32 +446,31 @@ def get_video_id(url):
     return None
 
 
-
 def get_transcript(url):
     try:
         video_id = get_video_id(url)
 
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        text = " ".join([t["text"] for t in transcript])
+        try:
+            transcript = transcript_list.find_transcript(['en'])
+        except:
+            transcript = transcript_list.find_generated_transcript(['en'])
+
+        data = transcript.fetch()
+
+        text = " ".join([t["text"] for t in data])
         return text
 
-    except TranscriptsDisabled:
-        return "ERROR: Transcripts are disabled for this video."
-
-    except NoTranscriptFound:
-        return "ERROR: No transcript available."
-
     except Exception as e:
-        return f"ERROR: {str(e)}"  
-    
+        return f"ERROR: {str(e)}"
 
+    
 YOUTUBE_NAMESPACE = "youtube"
 @app.post("/process-youtube")
 async def process_youtube(url: str = Query(...)):
-    
     try:
-        # clear old youtube data
+        # clear previous video data
         try:
             index.delete(delete_all=True, namespace=YOUTUBE_NAMESPACE)
         except:
@@ -482,10 +481,10 @@ async def process_youtube(url: str = Query(...)):
         if text.startswith("ERROR"):
             return {"error": text}
 
+        # 🔥 SAME AS PDF
         chunks = chunk_text(text, size=1000)
         embeddings = create_embeddings(chunks)
 
-        # store with namespace
         vectors = []
         for i in range(len(embeddings)):
             vectors.append({
