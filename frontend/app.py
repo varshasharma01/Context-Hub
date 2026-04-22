@@ -407,56 +407,41 @@ with tab3:
 with tab4:
     st.header("🎥 YouTube Intelligence")
 
-    # -------- SESSION STATE --------
     if "yt_processed" not in st.session_state:
         st.session_state.yt_processed = False
-
     if "yt_url" not in st.session_state:
         st.session_state.yt_url = None
 
-    col1, col2 = st.columns([1,1], gap="large")
+    col1, col2 = st.columns([1, 1], gap="large")
 
-    # -------- LEFT (URL INPUT) --------
     with col1:
         yt_url = st.text_input("Paste YouTube URL")
 
         if yt_url:
+            video_id = get_video_id(yt_url) # Safe extraction
+            
+            if video_id:
+                # Thumbnail preview logic
+                st.image(f"http://img.youtube.com/vi/{video_id}/0.jpg", caption="Video Thumbnail", use_container_width=True)
+                
+                if st.session_state.yt_url != yt_url:
+                    st.session_state.yt_processed = False
 
-            # detect new video
-            if st.session_state.yt_url != yt_url:
-                st.session_state.yt_processed = False
+                if not st.session_state.yt_processed:
+                    if st.button("Process Video"): # Better to have a button here
+                        with st.spinner("Indexing Transcript..."):
+                            response = requests.post("http://localhost:8000/process-youtube", params={"url": yt_url})
+                            if response.status_code == 200:
+                                st.session_state.yt_processed = True
+                                st.session_state.yt_url = yt_url
+                                st.success("Video context indexed!")
+            else:
+                st.error("Invalid YouTube URL")
 
-            if not st.session_state.yt_processed:
-
-                with st.spinner("Processing YouTube video..."):
-                    try:
-                        response = requests.post(
-                            "http://localhost:8000/process-youtube",
-                            params={"url": yt_url}
-                        )
-
-                        if response.status_code == 200:
-                            st.session_state.yt_processed = True
-                            st.session_state.yt_url = yt_url
-                            st.success("Video processed!")
-
-                        else:
-                            st.error("Backend error")
-
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-        else:
-            st.info("Enter YouTube URL")
-
-    # -------- RIGHT (QUERY) --------
     with col2:
+        # Chat/Query section remains same
         query = st.text_input("Ask something about the video...")
-
-        ask_clicked = st.button("Ask video")
-
-        if ask_clicked:
-
+        if st.button("Ask Video"):
             if st.session_state.yt_processed:
 
                 if query:
