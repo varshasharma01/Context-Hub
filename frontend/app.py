@@ -478,43 +478,37 @@ with tab4:
 
     # -------- RIGHT: Q&A --------
     with col2:
-        st.subheader("💬 Ask the Video")
+        # st.subheader("💬 Ask the Video")
+    
+        query = st.text_input("Ask something about the YouTube video...")
 
-        if not st.session_state.yt_processed:
-            st.info("⬅️ Process a video first to start asking questions")
-        else:
-            # Chat history display
-            chat_container = st.container(height=380)
-            with chat_container:
-                if not st.session_state.yt_messages:
-                    st.caption("No questions yet. Ask something below!")
-                for msg in st.session_state.yt_messages:
-                    with st.chat_message(msg["role"]):
-                        st.write(msg["content"])
+        ask_clicked = st.button("Ask the video")
 
-            # Input
-            query = st.chat_input("Ask something about the video...")
+        if ask_clicked:
 
-            if query:
-                # Add user message
-                st.session_state.yt_messages.append({"role": "user", "content": query})
+            if st.session_state.url_processed:
 
-                with st.spinner("Thinking..."):
-                    try:
-                        response = requests.post(
-                            "http://localhost:8000/query-youtube",
-                            params={"query": query}
-                        )
-                        data = response.json()
+                if query:
+                    with st.spinner("Analyzing..."):
+                        try:
+                            response = requests.post(
+                                "http://localhost:8000/query-youtube",
+                                params={"query": query}
+                            )
 
-                        if response.status_code == 200 and "error" not in data:
-                            answer = data.get("answer", "No answer returned.")
-                        else:
-                            answer = f"❌ Error: {data.get('error', 'Unknown error')}"
+                            if response.status_code == 200:
+                                st.write(response.json().get("answer"))
 
-                    except Exception as e:
-                        answer = f"❌ Connection error: {e}"
+                            else:
+                                st.error("Backend error")
 
-                # Add assistant message
-                st.session_state.yt_messages.append({"role": "assistant", "content": answer})
-                st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+                else:
+                    st.warning("Enter a question")
+
+            else:
+                st.error("Process URL first!")
+                
+                
