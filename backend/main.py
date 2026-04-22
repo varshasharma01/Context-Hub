@@ -22,7 +22,6 @@ from PIL import Image
 
 from urllib.parse import urlparse, parse_qs
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
-
 # Load env variablesz
 load_dotenv()
 
@@ -171,7 +170,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         # STEP 1: Purana data delete karne ki koshish (with Try-Except)
         try:
             # delete_all=True kabhi kabhi error deta hai agar index empty ho
-            index.delete(delete_all=True)
+            index.delete(delete_all=True, namespace="")
             print("DEBUG: Pinecone Index Cleared.")
         except Exception as e:
             
@@ -301,7 +300,7 @@ async def process_image(file: UploadFile = File(...)):
 
     try:
         image = Image.open(file.file)
-        current_image = image  # 🔥 store for query
+        current_image = image  #  store for query
 
         # optional embedding
         image_vector = create_image_embedding(image)
@@ -445,57 +444,65 @@ def get_video_id(url):
     
     return None
 
-
 def get_transcript(url):
     try:
         video_id = get_video_id(url)
+        if not video_id:
+            return "ERROR: Invalid YouTube URL"
 
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        ytt_api = YouTubeTranscriptApi()  # instantiate in new version
 
+        # Try fetching English first, then any available language
         try:
-            transcript = transcript_list.find_transcript(['en'])
-        except:
-            transcript = transcript_list.find_generated_transcript(['en'])
+            transcript_data = ytt_api.fetch(video_id, languages=['en'])
+        except NoTranscriptFound:
+            # Get list of available transcripts and pick first
+            transcript_list = ytt_api.list(video_id)
+            available = list(transcript_list)
+            if not available:
+                return "ERROR: No transcripts available for this video"
+            transcript_data = available[0].fetch()
 
-        data = transcript.fetch()
-
-        text = " ".join([t["text"] for t in data])
+        # New API returns objects with .text attribute
+        text = " ".join([t.text for t in transcript_data])
         return text
 
+    except TranscriptsDisabled:
+        return "ERROR: Transcripts are disabled for this video"
     except Exception as e:
         return f"ERROR: {str(e)}"
-
     
 YOUTUBE_NAMESPACE = "youtube"
 @app.post("/process-youtube")
 async def process_youtube(url: str = Query(...)):
     try:
-        # clear previous video data
         try:
             index.delete(delete_all=True, namespace=YOUTUBE_NAMESPACE)
-        except:
-            pass
+        except Exception as e:
+            print(f"DEBUG: YouTube namespace clear skipped: {e}")
 
         text = get_transcript(url)
 
         if text.startswith("ERROR"):
             return {"error": text}
 
-        # 🔥 SAME AS PDF
         chunks = chunk_text(text, size=1000)
         embeddings = create_embeddings(chunks)
 
-        vectors = []
-        for i in range(len(embeddings)):
-            vectors.append({
+        if not embeddings:
+            return {"error": "Failed to create embeddings"}
+
+        vectors = [
+            {
                 "id": str(uuid.uuid4()),
                 "values": embeddings[i],
                 "metadata": {"text": chunks[i]}
-            })
+            }
+            for i in range(len(embeddings))
+        ]
 
         index.upsert(vectors=vectors, namespace=YOUTUBE_NAMESPACE)
-
-        return {"message": "YouTube processed successfully"}
+        return {"message": f"YouTube video processed successfully ({len(chunks)} chunks)"}
 
     except Exception as e:
         return {"error": str(e)}

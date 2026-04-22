@@ -404,7 +404,7 @@ with tab3:
                 
                 
 # ##############################################################################################################
-
+# -------- HELPER (place at top of file with other helpers) --------
 def get_video_id(url):
     parsed_url = urlparse(url)
     if "youtube.com" in url:
@@ -413,65 +413,108 @@ def get_video_id(url):
         return parsed_url.path.strip("/")
     return None
 
+
+# -------- TAB 4 --------
 with tab4:
     st.header("🎥 YouTube Intelligence")
 
+    # Session state init
     if "yt_processed" not in st.session_state:
         st.session_state.yt_processed = False
     if "yt_url" not in st.session_state:
         st.session_state.yt_url = None
+    if "yt_messages" not in st.session_state:
+        st.session_state.yt_messages = []
 
     col1, col2 = st.columns([1, 1], gap="large")
 
+    # -------- LEFT: URL + THUMBNAIL --------
     with col1:
-        yt_url = st.text_input("Paste YouTube URL")
+        st.subheader("📎 Video Input")
+        yt_url = st.text_input("Paste YouTube URL", placeholder="https://www.youtube.com/watch?v=...")
 
         if yt_url:
-            video_id = get_video_id(yt_url) # Safe extraction
-            
+            video_id = get_video_id(yt_url)
+
             if video_id:
-                # Thumbnail preview logic
-                st.image(f"http://img.youtube.com/vi/{video_id}/0.jpg", caption="Video Thumbnail", use_container_width=True)
-                
+                # Show thumbnail
+                st.image(
+                    f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
+                    width='content'
+                )
+
+                # Detect new URL → reset
                 if st.session_state.yt_url != yt_url:
                     st.session_state.yt_processed = False
+                    st.session_state.yt_messages = []
 
-                if not st.session_state.yt_processed:
-                    if st.button("Process Video"): # Better to have a button here
-                        with st.spinner("Indexing Transcript..."):
-                            response = requests.post("http://localhost:8000/process-youtube", params={"url": yt_url})
-                            if response.status_code == 200:
-                                st.session_state.yt_processed = True
-                                st.session_state.yt_url = yt_url
-                                st.success("Video context indexed!")
-            else:
-                st.error("Invalid YouTube URL")
-
-    with col2:
-        # Chat/Query section remains same
-        query = st.text_input("Ask something about the video...")
-        if st.button("Ask Video"):
-            if st.session_state.yt_processed:
-
-                if query:
-                    with st.spinner("Thinking..."):
-                        try:
-                            response = requests.post(
-                                "http://localhost:8000/query-youtube",
-                                params={"query": query}
-                            )
-
-                            if response.status_code == 200:
-                                st.write(response.json().get("answer"))
-
-                            else:
-                                st.error("Backend error")
-
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-
+                # Show status
+                if st.session_state.yt_processed:
+                    st.success("✅ Video indexed! Ask questions →")
                 else:
-                    st.warning("Enter a question")
+                    if st.button("⚙️ Process Video", use_container_width=True):
+                        with st.spinner("Fetching & indexing transcript..."):
+                            try:
+                                response = requests.post(
+                                    "http://localhost:8000/process-youtube",
+                                    params={"url": yt_url}
+                                )
+                                data = response.json()
 
+                                if response.status_code == 200 and "error" not in data:
+                                    st.session_state.yt_processed = True
+                                    st.session_state.yt_url = yt_url
+                                    st.success("✅ Video indexed!")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {data.get('error', 'Unknown error')}")
+
+                            except Exception as e:
+                                st.error(f"Connection error: {e}")
             else:
-                st.error("Process video first!")
+                st.error("❌ Invalid YouTube URL. Please check and try again.")
+        else:
+            st.info("🔗 Paste a YouTube link to get started")
+
+    # -------- RIGHT: Q&A --------
+    with col2:
+        st.subheader("💬 Ask the Video")
+
+        if not st.session_state.yt_processed:
+            st.info("⬅️ Process a video first to start asking questions")
+        else:
+            # Chat history display
+            chat_container = st.container(height=380)
+            with chat_container:
+                if not st.session_state.yt_messages:
+                    st.caption("No questions yet. Ask something below!")
+                for msg in st.session_state.yt_messages:
+                    with st.chat_message(msg["role"]):
+                        st.write(msg["content"])
+
+            # Input
+            query = st.chat_input("Ask something about the video...")
+
+            if query:
+                # Add user message
+                st.session_state.yt_messages.append({"role": "user", "content": query})
+
+                with st.spinner("Thinking..."):
+                    try:
+                        response = requests.post(
+                            "http://localhost:8000/query-youtube",
+                            params={"query": query}
+                        )
+                        data = response.json()
+
+                        if response.status_code == 200 and "error" not in data:
+                            answer = data.get("answer", "No answer returned.")
+                        else:
+                            answer = f"❌ Error: {data.get('error', 'Unknown error')}"
+
+                    except Exception as e:
+                        answer = f"❌ Connection error: {e}"
+
+                # Add assistant message
+                st.session_state.yt_messages.append({"role": "assistant", "content": answer})
+                st.rerun()
