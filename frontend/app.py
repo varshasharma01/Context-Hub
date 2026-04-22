@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-
+from urllib.parse import urlparse, parse_qs
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="ContextHub", layout="wide")
 
@@ -404,6 +404,15 @@ with tab3:
                 
                 
 # ##############################################################################################################
+
+def get_video_id(url):
+    parsed_url = urlparse(url)
+    if "youtube.com" in url:
+        return parse_qs(parsed_url.query).get("v", [None])[0]
+    elif "youtu.be" in url:
+        return parsed_url.path.strip("/")
+    return None
+
 with tab4:
     st.header("🎥 YouTube Intelligence")
 
