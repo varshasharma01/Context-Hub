@@ -6,3 +6,4 @@ pinecone-client
 groq
 nomic
 streamlit
+youtube-transcript-api

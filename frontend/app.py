@@ -190,7 +190,7 @@ with tab1:
                 st.success(f"File '{uploaded_file.name}' already processed")
 
         else:
-            st.warning("Please select a PDF file first!")
+            st.info("Please select a PDF file first!")
 
     # -------- RIGHT SIDE (QUERY) --------
     with col2:
