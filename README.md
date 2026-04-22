@@ -1,50 +1,150 @@
-# What Context Hub is About ?
+# 🚀 Context Hub – Multi-Modal RAG Application
 
-This project is a simple Retrieval-Augmented Generation (RAG) application.
+Context Hub is a multi-modal AI application that allows users to interact with PDFs, Images, URLs, and YouTube videos using Retrieval-Augmented Generation (RAG) and modern LLMs.
 
-## Features
-- Upload PDF
-- Extract text
-- Generate embeddings (Nomic)
-- Store in Pinecone
-- Ask questions
-- Get answers using Groq LLM
+---
 
-## Tech Stack
-- FastAPI (Backend)
-- HTML, CSS, JS (Frontend)
-- Pinecone (Vector DB)
-- Nomic (Embeddings)
-- Groq (LLM)
+## 🔥 Features
 
-## Setup
+### 📄 PDF Intelligence
+- Upload PDF documents
+- Extract text and create embeddings
+- Store embeddings in Pinecone
+- Ask context-based questions
 
-### 1. Clone repo
-git clone <your-repo-link>
-cd rag-project
+### 🖼️ Image Intelligence
+- Upload images
+- Ask questions about image content
+- Uses Gemini Vision for understanding
 
-### 2. Install dependencies
-pip install -r requirements.txt
+### 🌐 URL Intelligence
+- Paste any website URL
+- Extract content using web scraping
+- Ask questions or get summaries
 
-### 3. Add .env file
-Add your API keys:
-GROQ_API_KEY=
-PINECONE_API_KEY=
-PINECONE_ENV=
+### 🎥 YouTube Intelligence
+- Extract transcripts from videos
+- Convert transcripts into embeddings
+- Ask questions based on video content
 
-### 4. Run backend
-uvicorn main:app --reload
+---
 
-### 5. Open frontend
-Open index.html in browser
+## 🧠 Architecture
 
-## API Endpoints
+### PDF & YouTube (RAG Pipeline)
+Input → Text Extraction → Chunking → Embeddings (Nomic) → Pinecone → Retrieval → Gemini → Answer
+
+### Image (Vision Pipeline)
+Image → Gemini Vision → Answer
+
+### URL (Web Pipeline)
+URL → Scraping → Gemini → Answer
+
+---
+
+## 🛠️ Tech Stack
+
+- Frontend: Streamlit
+- Backend: FastAPI
+- LLM: Gemini (Google GenAI)
+- Embeddings: Nomic Embed
+- Vector Database: Pinecone
+- PDF Processing: PyMuPDF
+- Web Scraping: BeautifulSoup
+- YouTube: youtube-transcript-api
+
+---
+
+## 📁 Project Structure
+
+context-hub/
+│── backend/
+│   │── main.py
+│   │── .env
+│
+│── frontend/
+│   │── app.py
+│
+│── requirements.txt
+│── README.md
+│── .gitignore
+
+---
+
+## ⚙️ Setup Instructions
+
+### 1. Clone Repository
+git clone https://github.com/your-username/context-hub.git  
+cd context-hub  
+
+---
+
+### 2. Install Dependencies
+pip install -r requirements.txt  
+
+---
+
+### 3. Create .env File
+
+GEMINI_API_KEY=your_gemini_key  
+PINECONE_API_KEY=your_pinecone_key  
+NOMIC_API_KEY=your_nomic_key  
+
+---
+
+### 4. Run Backend
+uvicorn backend.main:app --reload  
+
+---
+
+### 5. Run Frontend
+streamlit run frontend/app.py  
+
+---
+
+## 🔗 API Endpoints
 
 POST /upload → Upload PDF  
-POST /query → Ask question  
+POST /query → Query PDF  
 
-## Future Improvements
-- Chat UI
+POST /process-image → Upload Image  
+POST /query-image → Query Image  
+
+POST /process-url → Analyze URL  
+POST /query-url → Query URL  
+
+POST /process-youtube → Process YouTube  
+POST /query-youtube → Query YouTube  
+
+---
+
+## ⚡ Key Highlights
+
+- Multi-modal AI system (PDF, Image, URL, YouTube)
+- RAG-based architecture for accurate answers
+- Fast embedding using Nomic
+- Efficient retrieval using Pinecone
+- Clean UI with Streamlit tabs
+- Handles real-world edge cases
+
+---
+
+## 🚀 Future Improvements
+
+- Chat history
+- Multi-document support
+- YouTube timestamp answers
 - Streaming responses
-- Better chunking
-- Multi-PDF support
+- Deployment (Docker / Cloud)
+
+---
+
+## 👩‍💻 Author
+
+Varsha
+
+---
+
+## ⭐ Support
+
+If you like this project, give it a ⭐ on GitHub!
