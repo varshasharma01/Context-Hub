@@ -74,7 +74,7 @@ context-hub/
 ## ⚙️ Setup Instructions
 
 ### 1. Clone Repository
-git clone https://github.com/your-username/context-hub.git  
+git clone https://github.com/varshasharma01/Context-Hub.git  
 cd context-hub  
 
 ---

@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import base64
 from urllib.parse import urlparse, parse_qs
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="ContextHub", layout="wide")
@@ -64,7 +65,7 @@ with tab0:
 
     with col1:
         st.markdown("### ⚡ Fast")
-        st.write("Powered by **Gemini** inference for near-instant responses.")
+        st.write("Powered by **Groq & Gemini** inference for near-instant responses.")
         
     with col2:
         st.markdown("### 🧠 Smart")
@@ -89,7 +90,7 @@ with tab0:
         2. **Process:** The system chunks the data and uses **Nomic** to create vector embeddings.
         3. **Store:** These vectors are indexed in a **Pinecone** database.
         4. **Retrieve:** When you ask a question, we find the most relevant context.
-        5. **Generate:** **Gemini** generates an accurate answer based ONLY on your data.
+        5. **Generate:** **Groq & Gemini** generates an accurate answer based ONLY on your data.
         """)
 
     st.markdown("---")
@@ -107,7 +108,7 @@ with tab0:
         </div><br>
         <div class="feature-card">
             <h4>2. Upload & Process</h4>
-            <p>Click the process button to let Nomic & Gemini index your data.</p>
+            <p>Click the process button to let Nomic, Groq & Gemini index your data.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -124,7 +125,7 @@ with tab0:
         """, unsafe_allow_html=True)
         
     st.divider()
-    st.caption("Developed by Varsha | Powered by Gemini, Pinecone & Nomic")
+    st.caption("Developed by Varsha | Powered by Groq, Gemini, Pinecone & Nomic")
     
 #########################################################################################################################
 
@@ -147,19 +148,34 @@ with tab1:
         uploaded_file = st.file_uploader(
             "Choose a PDF file",
             type="pdf",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key="pdf_input"
         )
 
         if uploaded_file is not None:
+            # --- PDF PREVIEW START ---
+            # 1. Read the file content
+            file_bytes = uploaded_file.read()
+            
+            # 2. Convert to base64
+            base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
+            
+            # 3. Create an iframe to display the PDF
+            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500" type="application/pdf"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
+            
+            # 4. CRITICAL: Reset the file pointer for the requests.post logic
+            uploaded_file.seek(0)
+            # --- PDF PREVIEW END ---
 
-            #  KEY FIX: detect new file
+            # KEY FIX: detect new file
             if st.session_state.uploaded_filename != uploaded_file.name:
                 st.session_state.file_processed = False
 
             if not st.session_state.file_processed:
-
                 with st.spinner("Analyzing with AI..."):
                     try:
+                        # Use getvalue() to ensure the full file is sent
                         files = {
                             "file": (
                                 uploaded_file.name,
@@ -175,23 +191,18 @@ with tab1:
 
                         if response.status_code == 200:
                             st.success(response.json()['message'])
-
-                            # update state
                             st.session_state.file_processed = True
                             st.session_state.uploaded_filename = uploaded_file.name
-
                         else:
                             st.error(f"Backend Error: {response.text}")
 
                     except Exception as e:
                         st.error(f"Connection Error: {e}")
-
             else:
                 st.success(f"File '{uploaded_file.name}' already processed")
 
         else:
             st.info("Please select a PDF file first!")
-
     # -------- RIGHT SIDE (QUERY) --------
     with col2:
         st.subheader("Query Document")
@@ -418,7 +429,7 @@ def get_video_id(url):
 with tab4:
     st.header("🎥 YouTube Intelligence")
 
-    # Session state init
+    # -------- SESSION STATE --------
     if "yt_processed" not in st.session_state:
         st.session_state.yt_processed = False
     if "yt_url" not in st.session_state:
@@ -427,52 +438,70 @@ with tab4:
         st.session_state.yt_messages = []
 
     col1, col2 = st.columns([1, 1], gap="large")
-
     # -------- LEFT: URL + THUMBNAIL --------
     with col1:
         st.subheader("📎 Video Input")
-        yt_url = st.text_input("Paste YouTube URL", placeholder="https://www.youtube.com/watch?v=...")
+
+        yt_url = st.text_input(
+            "Paste YouTube URL",
+            placeholder="https://www.youtube.com/watch?v=...",
+            key="yt_input"
+        )
 
         if yt_url:
             video_id = get_video_id(yt_url)
 
             if video_id:
-                # Show thumbnail
-                st.image(
-                    f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
-                    width='content'
-                )
 
-                # Detect new URL → reset
+                # 🔥 CLEAR BUTTON (TOP RIGHT)
+                col_img, col_clear = st.columns([8,1])
+
+                with col_clear:
+                    if st.button("❌"):
+                        st.session_state.yt_processed = False
+                        st.session_state.yt_url = None
+                        st.session_state.yt_messages = []
+                        st.rerun()
+
+                # 🔥 THUMBNAIL
+                with col_img:
+                    st.image(
+                        f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
+                        use_container_width=True
+                    )
+
+                # 🔥 AUTO PROCESS ON NEW URL
                 if st.session_state.yt_url != yt_url:
+
                     st.session_state.yt_processed = False
                     st.session_state.yt_messages = []
 
-                # Show status
+                    with st.spinner("Fetching & indexing transcript..."):
+                        try:
+                            response = requests.post(
+                                "http://localhost:8000/process-youtube",
+                                params={"url": yt_url}
+                            )
+
+                            data = response.json()
+
+                            if response.status_code == 200 and "error" not in data:
+                                st.session_state.yt_processed = True
+                                st.session_state.yt_url = yt_url
+                                st.success("✅ Video indexed!")
+                            else:
+                                st.error(f"❌ {data.get('error', 'Unknown error')}")
+
+                        except Exception as e:
+                            st.error(f"Connection error: {e}")
+
+                # STATUS
                 if st.session_state.yt_processed:
-                    st.success("✅ Video indexed! Ask questions →")
-                else:
-                    if st.button("⚙️ Process Video", use_container_width=True):
-                        with st.spinner("Fetching & indexing transcript..."):
-                            try:
-                                response = requests.post(
-                                    "http://localhost:8000/process-youtube",
-                                    params={"url": yt_url}
-                                )
-                                data = response.json()
+                    st.success("✅ Ready! Ask questions →")
 
-                                if response.status_code == 200 and "error" not in data:
-                                    st.session_state.yt_processed = True
-                                    st.session_state.yt_url = yt_url
-                                    st.success("✅ Video indexed!")
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ {data.get('error', 'Unknown error')}")
-
-                            except Exception as e:
-                                st.error(f"Connection error: {e}")
             else:
-                st.error("❌ Invalid YouTube URL. Please check and try again.")
+                st.error("❌ Invalid YouTube URL")
+
         else:
             st.info("🔗 Paste a YouTube link to get started")
 
