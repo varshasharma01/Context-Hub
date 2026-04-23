@@ -436,8 +436,13 @@ with tab4:
         st.session_state.yt_url = None
     if "yt_messages" not in st.session_state:
         st.session_state.yt_messages = []
+    if "yt_input_key" not in st.session_state:
+        st.session_state.yt_input_key = 0
+    if "yt_answer" not in st.session_state:
+        st.session_state.yt_answer = None
 
     col1, col2 = st.columns([1, 1], gap="large")
+
     # -------- LEFT: URL + THUMBNAIL --------
     with col1:
         st.subheader("📎 Video Input")
@@ -445,7 +450,7 @@ with tab4:
         yt_url = st.text_input(
             "Paste YouTube URL",
             placeholder="https://www.youtube.com/watch?v=...",
-            key="yt_input"
+            key=f"yt_input_{st.session_state.yt_input_key}"   # dynamic key = clears on reset
         )
 
         if yt_url:
@@ -453,28 +458,29 @@ with tab4:
 
             if video_id:
 
-                #  CLEAR BUTTON (TOP RIGHT)
-                col_img, col_clear = st.columns([8,1])
+                col_img, col_clear = st.columns([8, 1])
 
                 with col_clear:
                     if st.button("❌"):
                         st.session_state.yt_processed = False
                         st.session_state.yt_url = None
                         st.session_state.yt_messages = []
+                        st.session_state.yt_input_key += 1   # forces text input to reset
+                        st.session_state.yt_answer = None    # clears the answer too
                         st.rerun()
 
-                #  THUMBNAIL
                 with col_img:
                     st.image(
                         f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
-                        width='content'
+                        width="content"
                     )
 
-                #  AUTO PROCESS ON NEW URL
+                # AUTO PROCESS ON NEW URL
                 if st.session_state.yt_url != yt_url:
 
                     st.session_state.yt_processed = False
                     st.session_state.yt_messages = []
+                    st.session_state.yt_answer = None
 
                     with st.spinner("Fetching & indexing transcript..."):
                         try:
@@ -488,14 +494,13 @@ with tab4:
                             if response.status_code == 200 and "error" not in data:
                                 st.session_state.yt_processed = True
                                 st.session_state.yt_url = yt_url
-                                st.success("✅ Video indexed!")
+                                # st.success("✅ Video indexed!")
                             else:
                                 st.error(f"❌ {data.get('error', 'Unknown error')}")
 
                         except Exception as e:
                             st.error(f"Connection error: {e}")
 
-                # STATUS
                 if st.session_state.yt_processed:
                     st.success("✅ Ready! Ask questions →")
 
@@ -507,16 +512,12 @@ with tab4:
 
     # -------- RIGHT: Q&A --------
     with col2:
-        # st.subheader("💬 Ask the Video")
-    
         query = st.text_input("Ask something about the YouTube video...")
 
         ask_clicked = st.button("Ask the video")
 
         if ask_clicked:
-
-            if st.session_state.url_processed:
-
+            if st.session_state.yt_processed:
                 if query:
                     with st.spinner("Analyzing..."):
                         try:
@@ -526,18 +527,18 @@ with tab4:
                             )
 
                             if response.status_code == 200:
-                                st.write(response.json().get("answer"))
-
+                                st.session_state.yt_answer = response.json().get("answer")
                             else:
                                 st.error("Backend error")
 
                         except Exception as e:
                             st.error(f"Error: {e}")
-
                 else:
                     st.warning("Enter a question")
-
             else:
-                st.error("Process URL first!")
-                
-                
+                st.error("Process a YouTube URL first!")
+
+        # Display persisted answer
+        if st.session_state.yt_answer:
+            st.markdown("### Answer:")
+            st.write(st.session_state.yt_answer)

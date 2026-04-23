@@ -413,6 +413,7 @@ async def process_youtube(url: str = Query(...)):
             )
             for i in range(len(embeddings))
         ]
+        
         index.upsert(vectors=vectors, namespace=YOUTUBE_NAMESPACE)
         return {"message": f"YouTube video processed successfully ({len(chunks)} chunks)"}
 
