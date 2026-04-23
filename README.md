@@ -32,13 +32,13 @@ Context Hub is a multi-modal AI application that allows users to interact with P
 ## 🧠 Architecture
 
 ### PDF & YouTube (RAG Pipeline)
-Input → Text Extraction → Chunking → Embeddings (Nomic) → Pinecone → Retrieval → Gemini → Answer
+Input → Text Extraction → Chunking → Embeddings (Nomic) → Pinecone → Retrieval → Groq → Answer
 
 ### Image (Vision Pipeline)
 Image → Gemini Vision → Answer
 
 ### URL (Web Pipeline)
-URL → Scraping → Gemini → Answer
+URL → Scraping → Groq → Answer
 
 ---
 
@@ -46,7 +46,7 @@ URL → Scraping → Gemini → Answer
 
 - Frontend: Streamlit
 - Backend: FastAPI
-- LLM: Gemini (Google GenAI)
+- LLM: Groq 
 - Embeddings: Nomic Embed
 - Vector Database: Pinecone
 - PDF Processing: PyMuPDF

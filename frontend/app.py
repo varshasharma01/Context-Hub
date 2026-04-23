@@ -453,7 +453,7 @@ with tab4:
 
             if video_id:
 
-                # 🔥 CLEAR BUTTON (TOP RIGHT)
+                #  CLEAR BUTTON (TOP RIGHT)
                 col_img, col_clear = st.columns([8,1])
 
                 with col_clear:
@@ -463,14 +463,14 @@ with tab4:
                         st.session_state.yt_messages = []
                         st.rerun()
 
-                # 🔥 THUMBNAIL
+                #  THUMBNAIL
                 with col_img:
                     st.image(
                         f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
-                        use_container_width=True
+                        width='content'
                     )
 
-                # 🔥 AUTO PROCESS ON NEW URL
+                #  AUTO PROCESS ON NEW URL
                 if st.session_state.yt_url != yt_url:
 
                     st.session_state.yt_processed = False
