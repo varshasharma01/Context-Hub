@@ -195,4 +195,4 @@ This starts both servers together:
 
 ## ⭐ Support
 
-If you found this useful, consider giving it a ⭐ on GitHub — it means a lot!
+If you found this useful, consider giving it a ⭐ on GitHub !
