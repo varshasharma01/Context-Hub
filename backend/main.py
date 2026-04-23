@@ -428,15 +428,16 @@ async def query_url(query: str = Query(...)):
         return {"answer": answer}
     except Exception as e:
         return {"error": str(e)}
-
+# ####################################################################################
 
 @app.post("/process-youtube")
 async def process_youtube(url: str = Query(...)):
     try:
+        # 404 just means namespace doesn't exist yet — both cases are fine
         try:
             index.delete(delete_all=True, namespace=YOUTUBE_NAMESPACE)
-        except Exception as e:
-            print(f"DEBUG: YouTube namespace clear skipped: {e}")
+        except Exception:
+            pass  # namespace didn't exist yet, that's okay
 
         text = get_transcript(url)
         if text.startswith("ERROR"):
@@ -456,15 +457,12 @@ async def process_youtube(url: str = Query(...)):
             )
             for i in range(len(embeddings))
         ]
-        
-        index.delete(delete_all=True)
-        
+
         index.upsert(vectors=vectors, namespace=YOUTUBE_NAMESPACE)
         return {"message": f"YouTube video processed successfully ({len(chunks)} chunks)"}
 
     except Exception as e:
         return {"error": str(e)}
-
 
 @app.post("/query-youtube")
 async def query_youtube(query: str = Query(...)):
