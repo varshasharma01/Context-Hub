@@ -17,3 +17,4 @@ streamlit run frontend/app.py
 # When Streamlit is closed, also kill the backend
 echo "🛑 Shutting down ContextHub..."
 kill $BACKEND_PID
+# all at once
