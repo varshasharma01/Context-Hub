@@ -50,6 +50,8 @@ app.add_middleware(
 )
 
 # -------- NAMESPACES --------
+PDF_NAMESPACE = "pdf"  
+current_pdf_namespace = "pdf_default"
 IMAGE_NAMESPACE = "image"
 YOUTUBE_NAMESPACE = "youtube"
 
@@ -79,7 +81,7 @@ def create_embeddings(chunks: list):
         return []
 
 
-def store_embeddings(chunks: list, embeddings: list):
+def store_embeddings(chunks: list, embeddings: list, namespace: str = ""):
     if not chunks or not embeddings:
         print("DEBUG: Nothing to store.")
         return
@@ -92,10 +94,10 @@ def store_embeddings(chunks: list, embeddings: list):
         for i in range(len(embeddings))
     ]
     if vectors:
-        index.upsert(vectors=vectors)
+        index.upsert(vectors=vectors, namespace=namespace)   # ← namespace added
 
 
-def search(query: str):
+def search(query: str, namespace: str = ""):
     try:
         query_response = embed.text(
             texts=[query],
@@ -108,7 +110,8 @@ def search(query: str):
         results = index.query(
             vector=query_emb,
             top_k=3,
-            include_metadata=True
+            include_metadata=True,
+            namespace=namespace    # ← namespace added
         )
         relevant_chunks = []
         for match in results['matches']:
@@ -146,7 +149,47 @@ def generate_answer(query: str, context: str):
         print(f"Groq Error: {str(e)}")
         return f"Groq Error: {str(e)}"
 
+@app.post("/upload")
+async def upload_pdf(file: UploadFile = File(...)):
+    global current_pdf_namespace
+    try:
+        # Generate a fresh unique namespace for every new upload
+        current_pdf_namespace = f"pdf_{uuid.uuid4().hex}"
+        print(f"DEBUG: Using new namespace: {current_pdf_namespace}")
 
+        content = await file.read()
+        pdf = fitz.open(stream=content, filetype="pdf")
+
+        text = ""
+        for page in pdf:
+            text += page.get_text()
+
+        if not text.strip():
+            return {"error": "PDF is empty or could not be read."}
+
+        chunks = chunk_text(text)
+        embeddings = create_embeddings(chunks)
+        store_embeddings(chunks, embeddings, namespace=current_pdf_namespace)
+        return {"message": "PDF processed successfully."}
+
+    except Exception as e:
+        print(f"Upload Error: {e}")
+        return {"error": f"Internal Server Error: {str(e)}"}
+    
+    
+@app.post("/query")
+async def query_pdf(query: str = Query(...)):
+    global current_pdf_namespace
+    try:
+        results = search(query, namespace=current_pdf_namespace)
+        if not results:
+            return {"answer": "I couldn't find any relevant information in the document."}
+        context = " ".join(results)
+        answer = generate_answer(query, context)
+        return {"answer": answer}
+    except Exception as e:
+        return {"error": f"Search failed: {str(e)}"}
+    
 # -------- IMAGE HELPERS --------
 
 def create_image_embedding(image):
@@ -413,6 +456,8 @@ async def process_youtube(url: str = Query(...)):
             )
             for i in range(len(embeddings))
         ]
+        
+        index.delete(delete_all=True)
         
         index.upsert(vectors=vectors, namespace=YOUTUBE_NAMESPACE)
         return {"message": f"YouTube video processed successfully ({len(chunks)} chunks)"}

@@ -1,48 +1,40 @@
 from fastapi import FastAPI, UploadFile, File, Query
-from  google import genai
 from fastapi.middleware.cors import CORSMiddleware
 import nomic
-# for pdf
 import fitz  # PyMuPDF
 from nomic import embed
-from pinecone import Pinecone
+from pinecone import Pinecone, Vector
 import os
 from dotenv import load_dotenv
-import string
-from nomic import embed
 import uuid
-# for URL
 import requests
 from bs4 import BeautifulSoup
-# for image
 import base64
 import io
-from PIL import Image
-# for youtube video 
 
+from PIL import Image
 from urllib.parse import urlparse, parse_qs
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
-# Load env variablesz
+from groq import Groq
+
 load_dotenv()
 
-from google import genai # Naya import
+# -------- CLIENTS --------
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+from google import genai # 
 
 # Client initialize karein
 client_gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_ENV = os.getenv("PINECONE_ENV")
-
 NOMIC_API_KEY = os.getenv("NOMIC_API_KEY")
-# Login to Nomic
+
 if NOMIC_API_KEY:
     nomic.login(NOMIC_API_KEY)
 else:
     print("Warning: NOMIC_API_KEY not found!")
-
-# Init clients
-# client = Groq(api_key=GROQ_API_KEY)
 
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index("context-hub")
@@ -55,128 +47,116 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-   
 )
 
-# -------- HELPER FUNCTIONS -------- #
+# -------- NAMESPACES --------
+PDF_NAMESPACE = "pdf"  
+current_pdf_namespace = "pdf_default"
+IMAGE_NAMESPACE = "image"
+YOUTUBE_NAMESPACE = "youtube"
 
-def chunk_text(text, size=500):
+# -------- HELPER FUNCTIONS --------
+
+def chunk_text(text: str, size: int = 500):
     return [text[i:i+size] for i in range(0, len(text), size)]
 
 
-# 1. Update create_embeddings
-def create_embeddings(chunks):
+def create_embeddings(chunks: list):
     if not chunks:
         return []
-    response = embed.text(
-        texts=chunks,
-        model="nomic-embed-text-v1",
-        task_type="search_document"
-    )
-    # Check if 'embeddings' key exists and is not empty
-    if 'embeddings' in response and len(response['embeddings']) > 0:
-        return response['embeddings']
-    else:
-        print("DEBUG: Nomic returned no embeddings!")
-        return []
-    
-# 2. Update store_embeddings
-def store_embeddings(chunks, embeddings):
-    if not chunks or not embeddings:
-        print("DEBUG: Nothing to store. Chunks or Embeddings are empty.")
-        return
-
-    vectors = []
-    # Dono lists ki length same honi chahiye
-    for i in range(len(embeddings)):
-        unique_id = str(uuid.uuid4()) 
-        vectors.append({
-            "id": unique_id, 
-            "values": embeddings[i], 
-            "metadata": {"text": chunks[i]}
-        })
-    
-    if vectors:
-        index.upsert(vectors=vectors)
-# 3. Update search
-def search(query):
-    query_response = embed.text(
-        texts=[query],
-        model="nomic-embed-text-v1",
-        task_type="search_query"
-    )
-    query_emb = query_response['embeddings'][0]
-
-    results = index.query(
-        vector=query_emb,
-        top_k=3,
-        include_metadata=True
-    )
-    
-    # Extract text safely
-    relevant_chunks = []
-    for match in results['matches']:
-        if match.get('metadata') and 'text' in match['metadata']:
-            relevant_chunks.append(match['metadata']['text'])
-    
-    return relevant_chunks
-
-
-def generate_answer(query,context):
-    # print(f"DEBUG: Context sent to Groq: {context[:200]}...") # Pehle 200 characters dekhein
-    # if not context.strip():
-    #     return "I'm sorry, I couldn't find any relevant text in the PDF to answer this."
-    
-    # response = client.chat.completions.create(
-    #     model="llama3-70b-8192",
-    #     messages=[
-    #         {"role": "system", "content": "Answer only from given context"},
-    #         {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}
-    #     ]
-    # )
-    # return response.choices[0].message.content
-   
-    
-   
     try:
-        prompt = f"Context: {context}\n\nQuestion: {query}"
-        
-        # 'gemini-1.5-flash' ki jagah 'models/gemini-1.5-flash' try karein
-        # Aur safety ke liye hum system_instruction ko content se pehle define karte hain
-        response = client_gemini.models.generate_content(
-            model="gemini-3-flash-preview", 
-            contents=prompt,
-            config={
-                "system_instruction": "You are a helpful assistant. Answer ONLY using the provided context. If the answer is not there, say you don't know.\
-                    and when you get answer elaborate and generate more information about the answer."
-            }
+        response = embed.text(
+            texts=chunks,
+            model="nomic-embed-text-v1",
+            task_type="search_document"
         )
-        
-        # Gemini response object se text nikalne ka tarika
-        if response and response.text:
-            return response.text
+        result = dict(response)
+        if 'embeddings' in result and len(result['embeddings']) > 0:
+            return result['embeddings']
         else:
-            return "Gemini could not generate a response. Please check the context."
+            print("DEBUG: Nomic returned no embeddings!")
+            return []
+    except Exception as e:
+        print(f"Embedding error: {e}")
+        return []
+
+
+def store_embeddings(chunks: list, embeddings: list, namespace: str = ""):
+    if not chunks or not embeddings:
+        print("DEBUG: Nothing to store.")
+        return
+    vectors = [
+        Vector(
+            id=str(uuid.uuid4()),
+            values=embeddings[i],
+            metadata={"text": chunks[i]}
+        )
+        for i in range(len(embeddings))
+    ]
+    if vectors:
+        index.upsert(vectors=vectors, namespace=namespace)   # ← namespace added
+
+
+def search(query: str, namespace: str = ""):
+    try:
+        query_response = embed.text(
+            texts=[query],
+            model="nomic-embed-text-v1",
+            task_type="search_query"
+        )
+        result = dict(query_response)
+        query_emb = result['embeddings'][0]
+
+        results = index.query(
+            vector=query_emb,
+            top_k=3,
+            include_metadata=True,
+            namespace=namespace    # ← namespace added
+        )
+        relevant_chunks = []
+        for match in results['matches']:
+            if match.get('metadata') and 'text' in match['metadata']:
+                relevant_chunks.append(match['metadata']['text'])
+        return relevant_chunks
 
     except Exception as e:
-        print(f"DEBUG Gemini Error: {str(e)}")
-        return f"Gemini Error: {str(e)}"
+        print(f"Search error: {e}")
+        return []
 
-# -------- ROUTES -------- #
+
+def generate_answer(query: str, context: str):
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful assistant. Answer ONLY using the provided context. "
+                        "If the answer is not in the context, say you don't know. "
+                        "When you find an answer, elaborate and provide more information."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"Context: {context}\n\nQuestion: {query}"
+                }
+            ]
+        )
+        return response.choices[0].message.content
+
+    except Exception as e:
+        print(f"Groq Error: {str(e)}")
+        return f"Groq Error: {str(e)}"
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
+    global current_pdf_namespace
     try:
-        # STEP 1: Purana data delete karne ki koshish (with Try-Except)
-        try:
-            # delete_all=True kabhi kabhi error deta hai agar index empty ho
-            index.delete(delete_all=True, namespace="")
-            print("DEBUG: Pinecone Index Cleared.")
-        except Exception as e:
-            
-            print(f"DEBUG: Delete skipped or Index already empty: {e}")
+        # Generate a fresh unique namespace for every new upload
+        current_pdf_namespace = f"pdf_{uuid.uuid4().hex}"
+        print(f"DEBUG: Using new namespace: {current_pdf_namespace}")
 
-        # STEP 2: Nayi file read aur process karo
         content = await file.read()
         pdf = fitz.open(stream=content, filetype="pdf")
 
@@ -187,76 +167,49 @@ async def upload_pdf(file: UploadFile = File(...)):
         if not text.strip():
             return {"error": "PDF is empty or could not be read."}
 
-        # Chunks aur Embeddings
         chunks = chunk_text(text)
         embeddings = create_embeddings(chunks)
-        store_embeddings(chunks, embeddings)
+        store_embeddings(chunks, embeddings, namespace=current_pdf_namespace)
+        return {"message": "PDF processed successfully."}
 
-        return {"message": "New PDF processed successfully, old data cleared."}
-    
     except Exception as e:
         print(f"Upload Error: {e}")
         return {"error": f"Internal Server Error: {str(e)}"}
     
+    
 @app.post("/query")
-async def query_pdf(query: str = Query(...)): # Explicitly define as a query param
-    # results = search(query)
-    # context = " ".join(results)
-    
-    # # Temporarily just return the context to see if Pinecone is working
-    # return {"answer": f"Found Context: {context}"}
-    
+async def query_pdf(query: str = Query(...)):
+    global current_pdf_namespace
     try:
-        results = search(query)
+        results = search(query, namespace=current_pdf_namespace)
         if not results:
             return {"answer": "I couldn't find any relevant information in the document."}
-            
         context = " ".join(results)
-        
         answer = generate_answer(query, context)
-
-        # return {"answer": answer, "context": context}
-        # answer = generate_answer(query)
         return {"answer": answer}
-    
     except Exception as e:
         return {"error": f"Search failed: {str(e)}"}
     
+# -------- IMAGE HELPERS --------
+
 def create_image_embedding(image):
     output = embed.image(
         images=[image],
         model="nomic-embed-vision-v1.5"
     )
-    return output["embeddings"][0]
+    result = dict(output)
+    return result["embeddings"][0]
 
-def store_image_embedding(image_vector, filename):
-    index.upsert([
-        {
-            "id": str(uuid.uuid4()),
-            "values": image_vector,
-            "metadata": {
-                "type": "image",
-                "filename": filename
-            }
-        }
-    ])
-    
-    
-IMAGE_NAMESPACE = "image"
 
-def store_image_embedding(image_vector, filename):
+def store_image_embedding(image_vector, filename: str):
     index.upsert(
-        vectors=[{
-            "id": str(uuid.uuid4()),
-            "values": image_vector,
-            "metadata": {
-                "type": "image",
-                "filename": filename
-            }
-        }],
+        vectors=[Vector(
+            id=str(uuid.uuid4()),
+            values=image_vector,
+            metadata={"type": "image", "filename": filename}
+        )],
         namespace=IMAGE_NAMESPACE
     )
-
 
 def generate_image_answer(query, image):
     try:
@@ -292,187 +245,191 @@ def generate_image_answer(query, image):
         return f"Error: {str(e)}"
     
 
-current_image = None
 
-@app.post("/process-image")
-async def process_image(file: UploadFile = File(...)):
-    global current_image
+# -------- URL HELPERS --------
 
-    try:
-        image = Image.open(file.file)
-        current_image = image  #  store for query
-
-        # optional embedding
-        image_vector = create_image_embedding(image)
-        store_image_embedding(image_vector, file.filename)
-
-        return {"message": "Image processed successfully"}
-
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.post("/query-image")
-async def query_image(query: str = Query(...)):
-    global current_image
-
-    try:
-        if current_image is None:
-            return {"error": "No image uploaded"}
-
-        answer = generate_image_answer(query, current_image)
-
-        return {"answer": answer}
-
-    except Exception as e:
-        return {"error": str(e)}
- 
-##########################################################################################################    
-    
-def extract_text_from_url(url):
+def extract_text_from_url(url: str):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers, timeout=10)
-
         if response.status_code != 200:
             return None
-
         soup = BeautifulSoup(response.text, "html.parser")
-
-        # remove scripts/styles
         for tag in soup(["script", "style"]):
             tag.decompose()
-
         text = soup.get_text(separator=" ")
-
-        return text[:5000]   # limit (VERY IMPORTANT)
-
+        return text[:5000]
     except Exception as e:
-        print("URL Error:", e)
+        print(f"URL Error: {e}")
         return None
-    
-def generate_url_answer(url, query=None):
-    text = extract_text_from_url(url)
 
+
+def generate_url_answer(url: str, query: str = None):
+    text = extract_text_from_url(url)
     if not text:
         return "Could not fetch content from this URL."
-
     try:
-        prompt = f"""
-        You are given content from a webpage.
-
-        URL: {url}
-
-        Content:
-        {text}
-
-        Task:
-        Explain what this page is about in simple words.
-        """
-
-        if query:
-            prompt += f"\n\nUser Question: {query}"
-
-        response = client_gemini.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=prompt
+        user_msg = (
+            f"URL: {url}\n\n"
+            f"Content:\n{text}\n\n"
+            f"Task: Explain what this page is about in simple words."
         )
+        if query:
+            user_msg += f"\n\nUser Question: {query}"
 
-        return response.text if response.text else "No response."
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that answers questions about webpage content."
+                },
+                {
+                    "role": "user",
+                    "content": user_msg
+                }
+            ]
+        )
+        return response.choices[0].message.content
 
     except Exception as e:
         return f"Error: {str(e)}"
-    
-    
-current_url = None
-current_url_text = None
 
 
-@app.post("/process-url")
-async def process_url(url: str = Query(...)):
-    global current_url, current_url_text
+# -------- YOUTUBE HELPERS --------
 
-    text = extract_text_from_url(url)
-
-    if not text:
-        return {"error": "Failed to extract content"}
-
-    current_url = url
-    current_url_text = text
-
-    return {"message": "URL processed successfully"}
-
-
-@app.post("/query-url")
-async def query_url(query: str = Query(...)):
-    global current_url, current_url_text
-
-    if not current_url_text:
-        return {"error": "No URL processed"}
-
-    try:
-        prompt = f"""
-        URL: {current_url}
-
-        Content:
-        {current_url_text}
-
-        Question: {query}
-        """
-
-        response = client_gemini.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=prompt
-        )
-
-        return {"answer": response.text}
-
-    except Exception as e:
-        return {"error": str(e)}
-    
-    
-##########################################################################################################
-
-
-
-def get_video_id(url):
+def get_video_id(url: str):
     parsed_url = urlparse(url)
-
     if "youtube.com" in url:
         return parse_qs(parsed_url.query).get("v", [None])[0]
     elif "youtu.be" in url:
         return parsed_url.path.strip("/")
-    
     return None
 
-def get_transcript(url):
+
+def get_transcript(url: str):
     try:
         video_id = get_video_id(url)
         if not video_id:
             return "ERROR: Invalid YouTube URL"
 
-        ytt_api = YouTubeTranscriptApi()  # instantiate in new version
+        ytt_api = YouTubeTranscriptApi()
 
-        # Try fetching English first, then any available language
         try:
             transcript_data = ytt_api.fetch(video_id, languages=['en'])
         except NoTranscriptFound:
-            # Get list of available transcripts and pick first
             transcript_list = ytt_api.list(video_id)
             available = list(transcript_list)
             if not available:
                 return "ERROR: No transcripts available for this video"
             transcript_data = available[0].fetch()
 
-        # New API returns objects with .text attribute
-        text = " ".join([t.text for t in transcript_data])
+        text = " ".join([str(t.text) for t in transcript_data])
         return text
 
     except TranscriptsDisabled:
         return "ERROR: Transcripts are disabled for this video"
     except Exception as e:
         return f"ERROR: {str(e)}"
-    
-YOUTUBE_NAMESPACE = "youtube"
+
+
+# -------- ROUTES --------
+
+@app.post("/upload")
+async def upload_pdf(file: UploadFile = File(...)):
+    try:
+        try:
+            index.delete(delete_all=True, namespace="")
+            print("DEBUG: Pinecone default namespace cleared.")
+        except Exception as e:
+            print(f"DEBUG: Delete skipped: {e}")
+
+        content = await file.read()
+        pdf = fitz.open(stream=content, filetype="pdf")
+
+        text = ""
+        for page in pdf:
+            text += page.get_text()
+
+        if not text.strip():
+            return {"error": "PDF is empty or could not be read."}
+
+        chunks = chunk_text(text)
+        embeddings = create_embeddings(chunks)
+        store_embeddings(chunks, embeddings)
+        return {"message": "PDF processed successfully."}
+
+    except Exception as e:
+        print(f"Upload Error: {e}")
+        return {"error": f"Internal Server Error: {str(e)}"}
+
+
+@app.post("/query")
+async def query_pdf(query: str = Query(...)):
+    try:
+        results = search(query)
+        if not results:
+            return {"answer": "I couldn't find any relevant information in the document."}
+        context = " ".join(results)
+        answer = generate_answer(query, context)
+        return {"answer": answer}
+    except Exception as e:
+        return {"error": f"Search failed: {str(e)}"}
+
+
+current_image = None
+
+@app.post("/process-image")
+async def process_image(file: UploadFile = File(...)):
+    global current_image
+    try:
+        image = Image.open(file.file)
+        current_image = image
+        image_vector = create_image_embedding(image)
+        store_image_embedding(image_vector, file.filename)
+        return {"message": "Image processed successfully"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/query-image")
+async def query_image(query: str = Query(...)):
+    global current_image
+    try:
+        if current_image is None:
+            return {"error": "No image uploaded"}
+        answer = generate_image_answer(query, current_image)
+        return {"answer": answer}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+current_url = None
+current_url_text = None
+
+@app.post("/process-url")
+async def process_url(url: str = Query(...)):
+    global current_url, current_url_text
+    text = extract_text_from_url(url)
+    if not text:
+        return {"error": "Failed to extract content"}
+    current_url = url
+    current_url_text = text
+    return {"message": "URL processed successfully"}
+
+
+@app.post("/query-url")
+async def query_url(query: str = Query(...)):
+    global current_url, current_url_text
+    if not current_url_text:
+        return {"error": "No URL processed"}
+    try:
+        answer = generate_url_answer(current_url, query)
+        return {"answer": answer}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.post("/process-youtube")
 async def process_youtube(url: str = Query(...)):
     try:
@@ -482,7 +439,6 @@ async def process_youtube(url: str = Query(...)):
             print(f"DEBUG: YouTube namespace clear skipped: {e}")
 
         text = get_transcript(url)
-
         if text.startswith("ERROR"):
             return {"error": text}
 
@@ -493,29 +449,32 @@ async def process_youtube(url: str = Query(...)):
             return {"error": "Failed to create embeddings"}
 
         vectors = [
-            {
-                "id": str(uuid.uuid4()),
-                "values": embeddings[i],
-                "metadata": {"text": chunks[i]}
-            }
+            Vector(
+                id=str(uuid.uuid4()),
+                values=embeddings[i],
+                metadata={"text": chunks[i]}
+            )
             for i in range(len(embeddings))
         ]
-
+        
+        index.delete(delete_all=True)
+        
         index.upsert(vectors=vectors, namespace=YOUTUBE_NAMESPACE)
         return {"message": f"YouTube video processed successfully ({len(chunks)} chunks)"}
 
     except Exception as e:
         return {"error": str(e)}
-    
+
 
 @app.post("/query-youtube")
 async def query_youtube(query: str = Query(...)):
     try:
-        query_emb = embed.text(
+        query_response = embed.text(
             texts=[query],
             model="nomic-embed-text-v1",
             task_type="search_query"
-        )["embeddings"][0]
+        )
+        query_emb = dict(query_response)["embeddings"][0]
 
         results = index.query(
             vector=query_emb,
@@ -529,8 +488,10 @@ async def query_youtube(query: str = Query(...)):
             for match in results["matches"]
         ])
 
-        answer = generate_answer(query, context)
+        if not context.strip():
+            return {"answer": "I couldn't find relevant information in this video."}
 
+        answer = generate_answer(query, context)
         return {"answer": answer}
 
     except Exception as e:
