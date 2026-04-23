@@ -188,7 +188,6 @@ This starts both servers together:
 ## 👩‍💻 Author
 
 **Varsha Sharma**  
-Final Semester Project  
 
 [![GitHub](https://img.shields.io/badge/GitHub-varshasharma01-black?style=flat&logo=github)](https://github.com/varshasharma01)
 
