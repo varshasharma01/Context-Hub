@@ -8,3 +8,5 @@ nomic
 streamlit
 youtube-transcript-api
 gunicorn
+beautifulsoup4
+lxml
