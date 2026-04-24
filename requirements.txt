@@ -10,3 +10,9 @@ youtube-transcript-api
 gunicorn
 beautifulsoup4
 lxml
+pymupdf
+pillow
+
+nomic
+
+google-generativeai
