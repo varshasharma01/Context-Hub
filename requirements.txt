@@ -7,3 +7,4 @@ groq
 nomic
 streamlit
 youtube-transcript-api
+gunicorn
