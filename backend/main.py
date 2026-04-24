@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import nomic
 import fitz  # PyMuPDF
 from nomic import embed
-from pinecone import Pinecone, Vector
+from pinecone import Pinecone
 import os
 from dotenv import load_dotenv
 import uuid
